@@ -57,6 +57,40 @@ class ThermalPrinterPOS {
         }
     }
 
+    enableTestMode() {
+        const connectBtn = document.getElementById('connectBtn');
+        const statusElement = document.getElementById('printerStatus');
+        
+        // Simulate printer connection
+        this.printer = {
+            device: { name: 'Test Printer (Simulated)' },
+            server: null,
+            connected: true,
+            testMode: true
+        };
+
+        statusElement.textContent = 'Printer: Test Mode (Simulated)';
+        statusElement.className = 'status-connected';
+        connectBtn.textContent = 'Disconnect Test Mode';
+        connectBtn.onclick = () => this.disableTestMode();
+        
+        this.showNotification('Test mode enabled! You can test the POS functionality without a real printer.', 'info');
+    }
+
+    disableTestMode() {
+        const connectBtn = document.getElementById('connectBtn');
+        const statusElement = document.getElementById('printerStatus');
+        
+        this.printer = null;
+        
+        statusElement.textContent = 'Printer: Not Connected';
+        statusElement.className = 'status-disconnected';
+        connectBtn.textContent = 'Connect Printer';
+        connectBtn.onclick = () => this.connectPrinter();
+        
+        this.showNotification('Test mode disabled', 'info');
+    }
+
     bindEvents() {
         // Printer connection
         document.getElementById('connectBtn').addEventListener('click', () => this.connectPrinter());
@@ -89,7 +123,14 @@ class ThermalPrinterPOS {
             
             // Check if Web Bluetooth is supported
             if (!navigator.bluetooth) {
-                throw new Error('Web Bluetooth is not supported in this browser. Please use Chrome or Edge.');
+                // Show a modal with test mode option
+                const testMode = confirm('Web Bluetooth is not supported in this browser. Would you like to use Test Mode instead? (You can still test the POS functionality without printing)');
+                if (testMode) {
+                    this.enableTestMode();
+                    return;
+                } else {
+                    throw new Error('Web Bluetooth is not supported in this browser. Please use Chrome or Edge for full functionality.');
+                }
             }
 
             let selectedDevice;
@@ -231,31 +272,94 @@ class ThermalPrinterPOS {
                     scanBtn.disabled = true;
                     scanBtn.innerHTML = '<span class="loading"></span> Scanning...';
                     
-                    const device = await navigator.bluetooth.requestDevice({
-                        filters: [
-                            { namePrefix: 'M35' },
-                            { namePrefix: 'Micro' },
-                            { namePrefix: 'Thermal' },
-                            { namePrefix: 'Printer' },
-                            { namePrefix: 'POS' }
-                        ],
-                        optionalServices: [
-                            '0000180a-0000-1000-8000-00805f9b34fb', // Generic Access Service
-                            '0000180f-0000-1000-8000-00805f9b34fb', // Battery Service
-                            '0000180d-0000-1000-8000-00805f9b34fb'  // Device Information Service
-                        ]
-                    });
+                    // Clear previous results
+                    deviceList.innerHTML = '<p class="empty-devices">Scanning for devices...</p>';
                     
-                    this.addDeviceToList(deviceList, device, () => {
-                        modal.remove();
-                        resolve(device);
-                    });
+                    // Try different scanning approaches
+                    let device = null;
+                    
+                    // First try: Scan with specific filters
+                    try {
+                        device = await navigator.bluetooth.requestDevice({
+                            filters: [
+                                { namePrefix: 'M35' },
+                                { namePrefix: 'Micro' },
+                                { namePrefix: 'Thermal' },
+                                { namePrefix: 'Printer' },
+                                { namePrefix: 'POS' },
+                                { namePrefix: 'BT' },
+                                { namePrefix: 'Bluetooth' }
+                            ],
+                            optionalServices: [
+                                '0000180a-0000-1000-8000-00805f9b34fb', // Generic Access Service
+                                '0000180f-0000-1000-8000-00805f9b34fb', // Battery Service
+                                '0000180d-0000-1000-8000-00805f9b34fb', // Device Information Service
+                                '0000ffe0-0000-1000-8000-00805f9b34fb'  // Common printer service
+                            ]
+                        });
+                    } catch (filterError) {
+                        console.log('Filtered scan failed, trying acceptAllDevices...');
+                        
+                        // Second try: Accept all devices (user will see all nearby devices)
+                        try {
+                            device = await navigator.bluetooth.requestDevice({
+                                acceptAllDevices: true,
+                                optionalServices: [
+                                    '0000180a-0000-1000-8000-00805f9b34fb',
+                                    '0000180f-0000-1000-8000-00805f9b34fb',
+                                    '0000180d-0000-1000-8000-00805f9b34fb',
+                                    '0000ffe0-0000-1000-8000-00805f9b34fb'
+                                ]
+                            });
+                        } catch (acceptAllError) {
+                            throw new Error('No devices found or user cancelled selection');
+                        }
+                    }
+                    
+                    if (device) {
+                        this.addDeviceToList(deviceList, device, () => {
+                            modal.remove();
+                            resolve(device);
+                        });
+                    } else {
+                        throw new Error('No device selected');
+                    }
                     
                 } catch (error) {
                     console.error('Scan failed:', error);
-                    this.showNotification(`Scan failed: ${error.message}`, 'error');
+                    let errorMessage = 'Scan failed: ';
+                    
+                    if (error.name === 'NotFoundError') {
+                        errorMessage += 'No devices found. Make sure your printer is turned on and in pairing mode.';
+                    } else if (error.name === 'SecurityError') {
+                        errorMessage += 'Bluetooth access denied. Please allow Bluetooth access and try again.';
+                    } else if (error.name === 'NotSupportedError') {
+                        errorMessage += 'Bluetooth is not supported on this device.';
+                    } else if (error.message.includes('cancelled')) {
+                        errorMessage += 'Device selection was cancelled.';
+                    } else {
+                        errorMessage += error.message;
+                    }
+                    
+                    deviceList.innerHTML = `
+                        <div class="error-message">
+                            <h4>❌ Scan Failed</h4>
+                            <p>${errorMessage}</p>
+                            <div class="troubleshooting">
+                                <h5>Troubleshooting:</h5>
+                                <ul>
+                                    <li>Make sure your thermal printer is turned on</li>
+                                    <li>Put the printer in pairing mode</li>
+                                    <li>Ensure Bluetooth is enabled on your device</li>
+                                    <li>Try moving closer to the printer</li>
+                                    <li>Check if the printer is already connected to another device</li>
+                                </ul>
+                            </div>
+                        </div>
+                    `;
+                    
                     scanBtn.disabled = false;
-                    scanBtn.textContent = 'Scan for Devices';
+                    scanBtn.textContent = 'Try Again';
                 }
             });
             
@@ -265,25 +369,54 @@ class ThermalPrinterPOS {
                     pairedBtn.disabled = true;
                     pairedBtn.innerHTML = '<span class="loading"></span> Loading...';
                     
-                    // Try to get paired devices (this may not work in all browsers)
+                    // Check Bluetooth availability
                     if (navigator.bluetooth.getAvailability) {
                         const available = await navigator.bluetooth.getAvailability();
                         if (!available) {
-                            throw new Error('Bluetooth is not available');
+                            throw new Error('Bluetooth is not available on this device');
                         }
                     }
                     
-                    // For now, we'll show a message about manual pairing
+                    // Show information about paired devices
                     deviceList.innerHTML = `
                         <div class="paired-info">
-                            <h4>Paired Devices</h4>
-                            <p>To connect to a paired device:</p>
-                            <ol>
-                                <li>Make sure your thermal printer is turned on</li>
-                                <li>Ensure it's already paired with this device</li>
-                                <li>Click "Scan for Devices" to find it</li>
-                            </ol>
-                            <p><strong>Note:</strong> Web Bluetooth may not show all paired devices. If your printer doesn't appear, try scanning again.</p>
+                            <h4>📱 Paired Devices Information</h4>
+                            <p>Web Bluetooth has limitations with showing paired devices. Here's how to connect:</p>
+                            
+                            <div class="connection-steps">
+                                <h5>Method 1: Direct Scan</h5>
+                                <ol>
+                                    <li>Make sure your Micro M35 printer is turned on</li>
+                                    <li>Put the printer in pairing mode (usually hold power button for 3-5 seconds)</li>
+                                    <li>Click "Scan for Devices" above</li>
+                                    <li>Select your printer from the list</li>
+                                </ol>
+                                
+                                <h5>Method 2: Manual Pairing</h5>
+                                <ol>
+                                    <li>Pair your printer with your device through system Bluetooth settings first</li>
+                                    <li>Then use "Scan for Devices" to find it</li>
+                                </ol>
+                                
+                                <h5>Common Printer Names to Look For:</h5>
+                                <ul>
+                                    <li>M35</li>
+                                    <li>Micro M35</li>
+                                    <li>Thermal Printer</li>
+                                    <li>POS Printer</li>
+                                    <li>BT Printer</li>
+                                </ul>
+                            </div>
+                            
+                            <div class="troubleshooting-tips">
+                                <h5>💡 Troubleshooting Tips:</h5>
+                                <ul>
+                                    <li>Ensure your printer is within 10 feet</li>
+                                    <li>Check if the printer is already connected to another device</li>
+                                    <li>Try restarting the printer</li>
+                                    <li>Make sure you're using Chrome or Edge browser</li>
+                                </ul>
+                            </div>
                         </div>
                     `;
                     
@@ -292,7 +425,13 @@ class ThermalPrinterPOS {
                     
                 } catch (error) {
                     console.error('Paired devices failed:', error);
-                    this.showNotification(`Cannot access paired devices: ${error.message}`, 'error');
+                    deviceList.innerHTML = `
+                        <div class="error-message">
+                            <h4>❌ Cannot Access Paired Devices</h4>
+                            <p>Error: ${error.message}</p>
+                            <p>Please try using "Scan for Devices" instead.</p>
+                        </div>
+                    `;
                     pairedBtn.disabled = false;
                     pairedBtn.textContent = 'Show Paired Devices';
                 }
@@ -517,9 +656,18 @@ class ThermalPrinterPOS {
 
         try {
             const receiptContent = this.generateReceiptContent();
-            await this.sendToPrinter(receiptContent);
             
-            this.showNotification('Receipt printed successfully!', 'success');
+            if (this.printer.testMode) {
+                // Test mode - just show the receipt content
+                console.log('Test Mode - Receipt Content:');
+                console.log(receiptContent);
+                this.showNotification('Test Mode: Receipt content logged to console', 'info');
+            } else {
+                // Real printer mode
+                await this.sendToPrinter(receiptContent);
+                this.showNotification('Receipt printed successfully!', 'success');
+            }
+            
             this.closeModal();
             this.clearCart();
             

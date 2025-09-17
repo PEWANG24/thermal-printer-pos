@@ -506,6 +506,91 @@ header h1 {
     color: #2c3e50;
 }
 
+.error-message {
+    background: #fdf2f2;
+    border: 1px solid #fecaca;
+    border-radius: 8px;
+    padding: 20px;
+    margin: 10px 0;
+}
+
+.error-message h4 {
+    color: #e74c3c;
+    margin: 0 0 10px 0;
+}
+
+.error-message p {
+    color: #7f8c8d;
+    margin: 5px 0;
+}
+
+.troubleshooting {
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid #fecaca;
+}
+
+.troubleshooting h5 {
+    color: #2c3e50;
+    margin: 0 0 10px 0;
+    font-size: 1rem;
+}
+
+.troubleshooting ul {
+    margin: 0;
+    padding-left: 20px;
+}
+
+.troubleshooting li {
+    color: #555;
+    margin-bottom: 5px;
+}
+
+.connection-steps {
+    margin: 15px 0;
+}
+
+.connection-steps h5 {
+    color: #2c3e50;
+    margin: 15px 0 8px 0;
+    font-size: 1rem;
+}
+
+.connection-steps ol, .connection-steps ul {
+    margin: 8px 0;
+    padding-left: 20px;
+}
+
+.connection-steps li {
+    color: #555;
+    margin-bottom: 5px;
+    line-height: 1.4;
+}
+
+.troubleshooting-tips {
+    background: #f0f9ff;
+    border: 1px solid #bae6fd;
+    border-radius: 6px;
+    padding: 15px;
+    margin-top: 15px;
+}
+
+.troubleshooting-tips h5 {
+    color: #0369a1;
+    margin: 0 0 10px 0;
+    font-size: 1rem;
+}
+
+.troubleshooting-tips ul {
+    margin: 0;
+    padding-left: 20px;
+}
+
+.troubleshooting-tips li {
+    color: #0c4a6e;
+    margin-bottom: 5px;
+}
+
 /* Responsive device selection */
 @media (max-width: 768px) {
     .connection-options {
