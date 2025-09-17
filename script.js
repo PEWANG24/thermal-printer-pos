@@ -15,6 +15,7 @@ class ThermalPrinterPOS {
             { id: 10, name: 'Chips', price: 1.25, category: 'Snacks' }
         ];
         
+        this.lastConnectedDevice = this.getStoredDevice();
         this.init();
     }
 
@@ -22,6 +23,38 @@ class ThermalPrinterPOS {
         this.renderProducts();
         this.bindEvents();
         this.updateCartDisplay();
+        this.updateConnectButton();
+    }
+
+    getStoredDevice() {
+        try {
+            const stored = localStorage.getItem('thermal-printer-device');
+            return stored ? JSON.parse(stored) : null;
+        } catch (error) {
+            console.error('Error loading stored device:', error);
+            return null;
+        }
+    }
+
+    storeDevice(device) {
+        try {
+            const deviceInfo = {
+                id: device.id,
+                name: device.name,
+                timestamp: Date.now()
+            };
+            localStorage.setItem('thermal-printer-device', JSON.stringify(deviceInfo));
+        } catch (error) {
+            console.error('Error storing device:', error);
+        }
+    }
+
+    updateConnectButton() {
+        const connectBtn = document.getElementById('connectBtn');
+        if (this.lastConnectedDevice) {
+            connectBtn.innerHTML = `Connect to ${this.lastConnectedDevice.name}`;
+            connectBtn.title = `Last connected: ${this.lastConnectedDevice.name}`;
+        }
     }
 
     bindEvents() {
@@ -59,41 +92,251 @@ class ThermalPrinterPOS {
                 throw new Error('Web Bluetooth is not supported in this browser. Please use Chrome or Edge.');
             }
 
-            // Request Bluetooth device
-            const device = await navigator.bluetooth.requestDevice({
-                filters: [
-                    { namePrefix: 'M35' },
-                    { namePrefix: 'Micro' },
-                    { namePrefix: 'Thermal' }
-                ],
-                optionalServices: ['0000180a-0000-1000-8000-00805f9b34fb'] // Generic Access Service
-            });
+            let selectedDevice;
+
+            // If we have a last connected device, try to connect to it first
+            if (this.lastConnectedDevice) {
+                try {
+                    selectedDevice = await this.connectToStoredDevice();
+                } catch (error) {
+                    console.log('Could not connect to stored device, showing selection modal');
+                    selectedDevice = await this.showDeviceSelectionModal();
+                }
+            } else {
+                // Show device selection modal
+                selectedDevice = await this.showDeviceSelectionModal();
+            }
+
+            if (!selectedDevice) {
+                throw new Error('No device selected');
+            }
 
             // Connect to GATT server
-            const server = await device.gatt.connect();
+            const server = await selectedDevice.gatt.connect();
+            
+            // Store the device for future connections
+            this.storeDevice(selectedDevice);
+            this.lastConnectedDevice = this.getStoredDevice();
             
             // For thermal printers, we typically need to find the correct service
             // This is a simplified connection - actual implementation may vary
             this.printer = {
-                device: device,
+                device: selectedDevice,
                 server: server,
                 connected: true
             };
 
-            statusElement.textContent = 'Printer: Connected';
+            statusElement.textContent = `Printer: Connected (${selectedDevice.name})`;
             statusElement.className = 'status-connected';
             connectBtn.textContent = 'Disconnect';
             connectBtn.onclick = () => this.disconnectPrinter();
             
-            this.showNotification('Printer connected successfully!', 'success');
+            this.showNotification(`Printer connected successfully! (${selectedDevice.name})`, 'success');
             
         } catch (error) {
             console.error('Connection failed:', error);
             this.showNotification(`Connection failed: ${error.message}`, 'error');
             
             connectBtn.disabled = false;
-            connectBtn.textContent = 'Connect Printer';
+            this.updateConnectButton();
         }
+    }
+
+    async connectToStoredDevice() {
+        // Try to reconnect to the last connected device
+        const device = await navigator.bluetooth.requestDevice({
+            filters: [{ name: this.lastConnectedDevice.name }],
+            optionalServices: [
+                '0000180a-0000-1000-8000-00805f9b34fb', // Generic Access Service
+                '0000180f-0000-1000-8000-00805f9b34fb', // Battery Service
+                '0000180d-0000-1000-8000-00805f9b34fb'  // Device Information Service
+            ]
+        });
+        return device;
+    }
+
+    async showDeviceSelectionModal() {
+        return new Promise((resolve) => {
+            // Create device selection modal
+            const modal = document.createElement('div');
+            modal.className = 'modal';
+            modal.style.display = 'block';
+            modal.innerHTML = `
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3>Select Thermal Printer</h3>
+                        <span class="close" onclick="this.closest('.modal').remove()">&times;</span>
+                    </div>
+                    <div class="modal-body">
+                        <div class="device-selection">
+                            ${this.lastConnectedDevice ? `
+                                <div class="last-device">
+                                    <h4>Last Connected Device</h4>
+                                    <div class="device-item">
+                                        <div class="device-info">
+                                            <h4>${this.lastConnectedDevice.name}</h4>
+                                            <p>Last used: ${new Date(this.lastConnectedDevice.timestamp).toLocaleString()}</p>
+                                        </div>
+                                        <button id="quickConnectBtn" class="btn btn-success">Quick Connect</button>
+                                    </div>
+                                </div>
+                                <hr style="margin: 20px 0; border: none; border-top: 1px solid #e1e8ed;">
+                            ` : ''}
+                            <div class="connection-options">
+                                <button id="scanBtn" class="btn btn-primary">Scan for Devices</button>
+                                <button id="pairedBtn" class="btn btn-secondary">Show Paired Devices</button>
+                            </div>
+                            <div id="deviceList" class="device-list">
+                                <p class="empty-devices">Click "Scan for Devices" or "Show Paired Devices" to see available printers</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button id="cancelDeviceBtn" class="btn btn-secondary">Cancel</button>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+            
+            const deviceList = modal.querySelector('#deviceList');
+            const scanBtn = modal.querySelector('#scanBtn');
+            const pairedBtn = modal.querySelector('#pairedBtn');
+            const cancelBtn = modal.querySelector('#cancelDeviceBtn');
+            const quickConnectBtn = modal.querySelector('#quickConnectBtn');
+            
+            // Quick connect to last device
+            if (quickConnectBtn) {
+                quickConnectBtn.addEventListener('click', async () => {
+                    try {
+                        quickConnectBtn.disabled = true;
+                        quickConnectBtn.innerHTML = '<span class="loading"></span> Connecting...';
+                        
+                        const device = await this.connectToStoredDevice();
+                        modal.remove();
+                        resolve(device);
+                        
+                    } catch (error) {
+                        console.error('Quick connect failed:', error);
+                        this.showNotification(`Quick connect failed: ${error.message}`, 'error');
+                        quickConnectBtn.disabled = false;
+                        quickConnectBtn.textContent = 'Quick Connect';
+                    }
+                });
+            }
+            
+            // Scan for devices
+            scanBtn.addEventListener('click', async () => {
+                try {
+                    scanBtn.disabled = true;
+                    scanBtn.innerHTML = '<span class="loading"></span> Scanning...';
+                    
+                    const device = await navigator.bluetooth.requestDevice({
+                        filters: [
+                            { namePrefix: 'M35' },
+                            { namePrefix: 'Micro' },
+                            { namePrefix: 'Thermal' },
+                            { namePrefix: 'Printer' },
+                            { namePrefix: 'POS' }
+                        ],
+                        optionalServices: [
+                            '0000180a-0000-1000-8000-00805f9b34fb', // Generic Access Service
+                            '0000180f-0000-1000-8000-00805f9b34fb', // Battery Service
+                            '0000180d-0000-1000-8000-00805f9b34fb'  // Device Information Service
+                        ]
+                    });
+                    
+                    this.addDeviceToList(deviceList, device, () => {
+                        modal.remove();
+                        resolve(device);
+                    });
+                    
+                } catch (error) {
+                    console.error('Scan failed:', error);
+                    this.showNotification(`Scan failed: ${error.message}`, 'error');
+                    scanBtn.disabled = false;
+                    scanBtn.textContent = 'Scan for Devices';
+                }
+            });
+            
+            // Show paired devices (if available)
+            pairedBtn.addEventListener('click', async () => {
+                try {
+                    pairedBtn.disabled = true;
+                    pairedBtn.innerHTML = '<span class="loading"></span> Loading...';
+                    
+                    // Try to get paired devices (this may not work in all browsers)
+                    if (navigator.bluetooth.getAvailability) {
+                        const available = await navigator.bluetooth.getAvailability();
+                        if (!available) {
+                            throw new Error('Bluetooth is not available');
+                        }
+                    }
+                    
+                    // For now, we'll show a message about manual pairing
+                    deviceList.innerHTML = `
+                        <div class="paired-info">
+                            <h4>Paired Devices</h4>
+                            <p>To connect to a paired device:</p>
+                            <ol>
+                                <li>Make sure your thermal printer is turned on</li>
+                                <li>Ensure it's already paired with this device</li>
+                                <li>Click "Scan for Devices" to find it</li>
+                            </ol>
+                            <p><strong>Note:</strong> Web Bluetooth may not show all paired devices. If your printer doesn't appear, try scanning again.</p>
+                        </div>
+                    `;
+                    
+                    pairedBtn.disabled = false;
+                    pairedBtn.textContent = 'Show Paired Devices';
+                    
+                } catch (error) {
+                    console.error('Paired devices failed:', error);
+                    this.showNotification(`Cannot access paired devices: ${error.message}`, 'error');
+                    pairedBtn.disabled = false;
+                    pairedBtn.textContent = 'Show Paired Devices';
+                }
+            });
+            
+            // Cancel button
+            cancelBtn.addEventListener('click', () => {
+                modal.remove();
+                resolve(null);
+            });
+            
+            // Close modal when clicking outside
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    modal.remove();
+                    resolve(null);
+                }
+            });
+        });
+    }
+
+    addDeviceToList(deviceList, device, onSelect) {
+        const deviceItem = document.createElement('div');
+        deviceItem.className = 'device-item';
+        deviceItem.innerHTML = `
+            <div class="device-info">
+                <h4>${device.name || 'Unknown Device'}</h4>
+                <p>ID: ${device.id}</p>
+                <p>Connected: ${device.gatt.connected ? 'Yes' : 'No'}</p>
+            </div>
+            <button class="btn btn-primary">Select</button>
+        `;
+        
+        deviceItem.querySelector('button').addEventListener('click', () => {
+            onSelect();
+        });
+        
+        // Clear empty message if present
+        const emptyMsg = deviceList.querySelector('.empty-devices, .paired-info');
+        if (emptyMsg) {
+            emptyMsg.remove();
+        }
+        
+        deviceList.appendChild(deviceItem);
     }
 
     disconnectPrinter() {
