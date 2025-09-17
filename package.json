@@ -9,12 +9,17 @@
     "preview": "vite preview",
     "start": "vite"
   },
-  "keywords": ["pos", "thermal-printer", "bluetooth", "receipt", "esc-pos"],
+  "keywords": [
+    "pos",
+    "thermal-printer",
+    "bluetooth",
+    "receipt",
+    "esc-pos"
+  ],
   "author": "Peter Ngigi",
   "license": "MIT",
   "devDependencies": {
-    "vite": "^5.0.0",
-    "terser": "^5.0.0"
-  },
-  "dependencies": {}
+    "terser": "^5.44.0",
+    "vite": "^5.0.0"
+  }
 }
