@@ -155,6 +155,30 @@ class ThermalPrinterPOS {
             // Connect to GATT server
             const server = await selectedDevice.gatt.connect();
             
+            // Debug: List all available services and characteristics
+            console.log('Connected to device:', selectedDevice.name);
+            console.log('GATT server connected:', server.connected);
+            
+            try {
+                const services = await server.getPrimaryServices();
+                console.log('Available services:', services.length);
+                
+                for (const service of services) {
+                    console.log(`Service: ${service.uuid}`);
+                    try {
+                        const characteristics = await service.getCharacteristics();
+                        console.log(`  Characteristics (${characteristics.length}):`);
+                        for (const char of characteristics) {
+                            console.log(`    ${char.uuid} - Properties:`, char.properties);
+                        }
+                    } catch (error) {
+                        console.log(`  Error getting characteristics: ${error.message}`);
+                    }
+                }
+            } catch (error) {
+                console.log('Error listing services:', error.message);
+            }
+            
             // Store the device for future connections
             this.storeDevice(selectedDevice);
             this.lastConnectedDevice = this.getStoredDevice();
@@ -725,22 +749,110 @@ class ThermalPrinterPOS {
     }
 
     async sendBluetoothData(data) {
-        // This is where you would implement the actual Bluetooth communication
-        // For the Micro M35 printer, you would need to:
-        // 1. Find the correct service and characteristic
-        // 2. Send the ESC/POS commands as bytes
-        
         if (!this.printer || !this.printer.connected) {
             throw new Error('Printer not connected');
         }
 
-        // Simulate Bluetooth data transmission
-        return new Promise((resolve, reject) => {
-            setTimeout(() => {
-                console.log(`Simulated sending ${data.length} bytes to printer`);
-                resolve();
-            }, 1500);
-        });
+        if (this.printer.testMode) {
+            // Test mode - just log the data
+            console.log(`Test Mode - Would send ${data.length} bytes to printer:`, data);
+            return Promise.resolve();
+        }
+
+        try {
+            // Get the GATT server
+            const server = this.printer.server;
+            
+            // Common services for thermal printers
+            const services = [
+                '0000180a-0000-1000-8000-00805f9b34fb', // Generic Access Service
+                '0000180f-0000-1000-8000-00805f9b34fb', // Battery Service
+                '0000180d-0000-1000-8000-00805f9b34fb', // Device Information Service
+                '0000ffe0-0000-1000-8000-00805f9b34fb', // Common printer service
+                '0000ff00-0000-1000-8000-00805f9b34fb'  // Alternative printer service
+            ];
+
+            let writeCharacteristic = null;
+
+            // Try to find a writable characteristic
+            for (const serviceUUID of services) {
+                try {
+                    const service = await server.getPrimaryService(serviceUUID);
+                    const characteristics = await service.getCharacteristics();
+                    
+                    for (const char of characteristics) {
+                        if (char.properties.write || char.properties.writeWithoutResponse) {
+                            writeCharacteristic = char;
+                            console.log(`Found writable characteristic in service ${serviceUUID}`);
+                            break;
+                        }
+                    }
+                    
+                    if (writeCharacteristic) break;
+                } catch (error) {
+                    console.log(`Service ${serviceUUID} not available:`, error.message);
+                    continue;
+                }
+            }
+
+            if (!writeCharacteristic) {
+                // Fallback: try to find any characteristic that can write
+                const allServices = await server.getPrimaryServices();
+                for (const service of allServices) {
+                    const characteristics = await service.getCharacteristics();
+                    for (const char of characteristics) {
+                        if (char.properties.write || char.properties.writeWithoutResponse) {
+                            writeCharacteristic = char;
+                            console.log(`Found fallback writable characteristic in service ${service.uuid}`);
+                            break;
+                        }
+                    }
+                    if (writeCharacteristic) break;
+                }
+            }
+
+            if (!writeCharacteristic) {
+                throw new Error('No writable characteristic found. The printer may not support the required Bluetooth services.');
+            }
+
+            // Send data in chunks to avoid buffer overflow
+            const chunkSize = 20; // Small chunks for better compatibility
+            const dataArray = Array.from(data);
+            
+            console.log(`Sending ${data.length} bytes to printer in ${Math.ceil(dataArray.length / chunkSize)} chunks`);
+            console.log(`Using characteristic: ${writeCharacteristic.uuid}`);
+            console.log(`Characteristic properties:`, writeCharacteristic.properties);
+            
+            for (let i = 0; i < dataArray.length; i += chunkSize) {
+                const chunk = dataArray.slice(i, i + chunkSize);
+                const chunkBuffer = new Uint8Array(chunk);
+                
+                try {
+                    if (writeCharacteristic.properties.writeWithoutResponse) {
+                        await writeCharacteristic.writeValueWithoutResponse(chunkBuffer);
+                        console.log(`Sent chunk ${Math.floor(i / chunkSize) + 1}/${Math.ceil(dataArray.length / chunkSize)} (${chunk.length} bytes) - writeWithoutResponse`);
+                    } else if (writeCharacteristic.properties.write) {
+                        await writeCharacteristic.writeValue(chunkBuffer);
+                        console.log(`Sent chunk ${Math.floor(i / chunkSize) + 1}/${Math.ceil(dataArray.length / chunkSize)} (${chunk.length} bytes) - write`);
+                    } else {
+                        throw new Error('Characteristic does not support writing');
+                    }
+                    
+                    // Small delay between chunks
+                    await new Promise(resolve => setTimeout(resolve, 10));
+                    
+                } catch (chunkError) {
+                    console.error(`Error sending chunk ${Math.floor(i / chunkSize) + 1}:`, chunkError);
+                    throw new Error(`Failed to send data chunk: ${chunkError.message}`);
+                }
+            }
+
+            console.log('All data sent successfully to printer');
+            
+        } catch (error) {
+            console.error('Bluetooth communication error:', error);
+            throw new Error(`Failed to send data to printer: ${error.message}`);
+        }
     }
 
     closeModal() {
