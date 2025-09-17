@@ -13,6 +13,7 @@
             <div class="printer-status">
                 <span id="printerStatus" class="status-disconnected">Printer: Not Connected</span>
                 <button id="connectBtn" class="btn btn-primary">Connect Printer</button>
+                <button id="troubleshootBtn" class="btn btn-info">Troubleshoot</button>
             </div>
         </header>
 
@@ -68,6 +69,80 @@
                     <div class="modal-footer">
                         <button id="printReceiptBtn" class="btn btn-primary">Print Receipt</button>
                         <button id="cancelPrintBtn" class="btn btn-secondary">Cancel</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Troubleshooting Modal -->
+            <div id="troubleshootModal" class="modal">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3>🔧 Bluetooth Troubleshooting</h3>
+                        <span class="close">&times;</span>
+                    </div>
+                    <div class="modal-body">
+                        <div class="troubleshoot-content">
+                            <h4>Common Issues & Solutions</h4>
+                            
+                            <div class="troubleshoot-section">
+                                <h5>❌ "No writable characteristic found" Error</h5>
+                                <p>This error means the printer doesn't expose the required Bluetooth services for data transfer.</p>
+                                <ul>
+                                    <li><strong>Solution 1:</strong> Make sure your printer is in <strong>pairing mode</strong></li>
+                                    <li><strong>Solution 2:</strong> Disconnect the printer from any other devices (phones, tablets, etc.)</li>
+                                    <li><strong>Solution 3:</strong> Restart the printer and try connecting again</li>
+                                    <li><strong>Solution 4:</strong> Check if your printer supports Bluetooth data transfer (not just pairing)</li>
+                                </ul>
+                            </div>
+
+                            <div class="troubleshoot-section">
+                                <h5>🔍 Printer Not Found During Scan</h5>
+                                <ul>
+                                    <li>Ensure the printer is turned on and within 10 feet</li>
+                                    <li>Put the printer in pairing mode (usually hold power button for 3-5 seconds)</li>
+                                    <li>Make sure Bluetooth is enabled on your device</li>
+                                    <li>Try moving closer to the printer</li>
+                                    <li>Check if the printer is already connected to another device</li>
+                                </ul>
+                            </div>
+
+                            <div class="troubleshoot-section">
+                                <h5>🌐 Browser Compatibility</h5>
+                                <ul>
+                                    <li>Use <strong>Chrome</strong> or <strong>Edge</strong> for best compatibility</li>
+                                    <li>Web Bluetooth is not supported in Safari or Firefox</li>
+                                    <li>Make sure you're using HTTPS (required for Web Bluetooth)</li>
+                                </ul>
+                            </div>
+
+                            <div class="troubleshoot-section">
+                                <h5>🖨️ Printer-Specific Tips</h5>
+                                <ul>
+                                    <li><strong>Micro M35:</strong> Hold power button for 5 seconds to enter pairing mode</li>
+                                    <li><strong>Generic Thermal Printers:</strong> Look for "BT" or "Bluetooth" in the device name</li>
+                                    <li><strong>POS Printers:</strong> May need to be in "receipt mode" or "print mode"</li>
+                                </ul>
+                            </div>
+
+                            <div class="troubleshoot-section">
+                                <h5>🔄 Still Having Issues?</h5>
+                                <ul>
+                                    <li>Try the <strong>Test Mode</strong> to verify the POS functionality works</li>
+                                    <li>Check the browser console (F12) for detailed error messages</li>
+                                    <li>Try connecting to the printer through your device's Bluetooth settings first</li>
+                                    <li>Contact your printer manufacturer for Bluetooth service documentation</li>
+                                </ul>
+                            </div>
+
+                            <div class="troubleshoot-section">
+                                <h5>📱 Test Mode</h5>
+                                <p>If you can't connect to a real printer, you can use Test Mode to verify the POS system works correctly. The receipt will be logged to the browser console instead of printing.</p>
+                                <button id="enableTestModeBtn" class="btn btn-info">Enable Test Mode</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button id="closeTroubleshootBtn" class="btn btn-secondary">Close</button>
                     </div>
                 </div>
             </div>

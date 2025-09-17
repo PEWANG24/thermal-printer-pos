@@ -104,11 +104,20 @@ class ThermalPrinterPOS {
         document.getElementById('printReceiptBtn').addEventListener('click', () => this.printReceipt());
         document.getElementById('cancelPrintBtn').addEventListener('click', () => this.closeModal());
         
+        // Troubleshooting modal events
+        document.getElementById('troubleshootBtn').addEventListener('click', () => this.showTroubleshootModal());
+        document.getElementById('closeTroubleshootBtn').addEventListener('click', () => this.closeTroubleshootModal());
+        document.getElementById('enableTestModeBtn').addEventListener('click', () => this.enableTestModeFromTroubleshoot());
+        
         // Close modal when clicking outside
         window.addEventListener('click', (e) => {
-            const modal = document.getElementById('receiptModal');
-            if (e.target === modal) {
+            const receiptModal = document.getElementById('receiptModal');
+            const troubleshootModal = document.getElementById('troubleshootModal');
+            
+            if (e.target === receiptModal) {
                 this.closeModal();
+            } else if (e.target === troubleshootModal) {
+                this.closeTroubleshootModal();
             }
         });
     }
@@ -161,13 +170,16 @@ class ThermalPrinterPOS {
             
             try {
                 const services = await server.getPrimaryServices();
-                console.log('Available services:', services.length);
+                console.log(`🔍 Found ${services.length} services on device`);
+                
+                let writableCharacteristicsFound = 0;
                 
                 for (const service of services) {
-                    console.log(`Service: ${service.uuid}`);
+                    console.log(`📡 Service: ${service.uuid}`);
                     try {
                         const characteristics = await service.getCharacteristics();
-                        console.log(`  Characteristics (${characteristics.length}):`);
+                        console.log(`  📋 Characteristics (${characteristics.length}):`);
+                        
                         for (const char of characteristics) {
                             const props = {
                                 broadcast: char.properties.broadcast,
@@ -180,14 +192,29 @@ class ThermalPrinterPOS {
                                 reliableWrite: char.properties.reliableWrite,
                                 writableAuxiliaries: char.properties.writableAuxiliaries
                             };
-                            console.log(`    ${char.uuid} - Properties:`, props);
+                            
+                            const isWritable = props.write || props.writeWithoutResponse;
+                            const writableIcon = isWritable ? '✅' : '❌';
+                            
+                            console.log(`    ${writableIcon} ${char.uuid} - Properties:`, props);
+                            
+                            if (isWritable) {
+                                writableCharacteristicsFound++;
+                            }
                         }
                     } catch (error) {
-                        console.log(`  Error getting characteristics: ${error.message}`);
+                        console.log(`  ❌ Error getting characteristics: ${error.message}`);
                     }
                 }
+                
+                console.log(`📊 Summary: Found ${writableCharacteristicsFound} writable characteristics across ${services.length} services`);
+                
+                if (writableCharacteristicsFound === 0) {
+                    console.warn('⚠️ No writable characteristics found during connection. This may cause printing issues.');
+                }
+                
             } catch (error) {
-                console.log('Error listing services:', error.message);
+                console.log('❌ Error listing services:', error.message);
             }
             
             // Store the device for future connections
@@ -787,32 +814,68 @@ class ThermalPrinterPOS {
             // Get the GATT server
             const server = this.printer.server;
             
-            // Common services for thermal printers
+            // Comprehensive list of services for thermal printers
             const services = [
+                // Standard Bluetooth services
                 '0000180a-0000-1000-8000-00805f9b34fb', // Generic Access Service
                 '0000180f-0000-1000-8000-00805f9b34fb', // Battery Service
                 '0000180d-0000-1000-8000-00805f9b34fb', // Device Information Service
+                '0000180e-0000-1000-8000-00805f9b34fb', // Human Interface Device
+                
+                // Common thermal printer services
                 '0000ffe0-0000-1000-8000-00805f9b34fb', // Common printer service
+                '0000ffe1-0000-1000-8000-00805f9b34fb', // Printer characteristic service
                 '0000ff00-0000-1000-8000-00805f9b34fb', // Alternative printer service
                 '0000ff01-0000-1000-8000-00805f9b34fb', // Printer data service
                 '0000ff02-0000-1000-8000-00805f9b34fb', // Printer control service
                 '0000ff03-0000-1000-8000-00805f9b34fb', // Printer status service
                 '0000ff04-0000-1000-8000-00805f9b34fb', // Printer command service
-                '0000ff05-0000-1000-8000-00805f9b34fb'  // Printer data service 2
+                '0000ff05-0000-1000-8000-00805f9b34fb', // Printer data service 2
+                
+                // Micro M35 specific services (if known)
+                '0000fff0-0000-1000-8000-00805f9b34fb', // Custom service 1
+                '0000fff1-0000-1000-8000-00805f9b34fb', // Custom service 2
+                '0000fff2-0000-1000-8000-00805f9b34fb', // Custom service 3
+                
+                // Generic Serial Port Profile
+                '00001101-0000-1000-8000-00805f9b34fb', // Serial Port Profile
+                
+                // Generic Attribute Profile
+                '00001801-0000-1000-8000-00805f9b34fb', // Generic Attribute Profile
+                
+                // Common characteristics for data transfer
+                '0000ffe1-0000-1000-8000-00805f9b34fb', // Data characteristic
+                '0000ffe2-0000-1000-8000-00805f9b34fb', // Control characteristic
+                '0000ffe3-0000-1000-8000-00805f9b34fb', // Status characteristic
             ];
 
             let writeCharacteristic = null;
+            let foundService = null;
 
-            // Try to find a writable characteristic
+            console.log('Searching for writable characteristics...');
+
+            // First, try to find a writable characteristic in known services
             for (const serviceUUID of services) {
                 try {
+                    console.log(`Checking service: ${serviceUUID}`);
                     const service = await server.getPrimaryService(serviceUUID);
                     const characteristics = await service.getCharacteristics();
                     
+                    console.log(`Service ${serviceUUID} has ${characteristics.length} characteristics`);
+                    
                     for (const char of characteristics) {
+                        console.log(`Characteristic ${char.uuid}:`, {
+                            write: char.properties.write,
+                            writeWithoutResponse: char.properties.writeWithoutResponse,
+                            read: char.properties.read,
+                            notify: char.properties.notify,
+                            indicate: char.properties.indicate
+                        });
+                        
                         if (char.properties.write || char.properties.writeWithoutResponse) {
                             writeCharacteristic = char;
-                            console.log(`Found writable characteristic in service ${serviceUUID}`);
+                            foundService = serviceUUID;
+                            console.log(`✅ Found writable characteristic in service ${serviceUUID}`);
                             break;
                         }
                     }
@@ -824,54 +887,110 @@ class ThermalPrinterPOS {
                 }
             }
 
+            // If not found in known services, scan all available services
             if (!writeCharacteristic) {
-                // Fallback: try to find any characteristic that can write
+                console.log('No writable characteristic found in known services, scanning all services...');
                 const allServices = await server.getPrimaryServices();
+                console.log(`Found ${allServices.length} total services`);
+                
                 for (const service of allServices) {
-                    const characteristics = await service.getCharacteristics();
-                    for (const char of characteristics) {
-                        if (char.properties.write || char.properties.writeWithoutResponse) {
-                            writeCharacteristic = char;
-                            console.log(`Found fallback writable characteristic in service ${service.uuid}`);
-                            break;
-                        }
-                    }
-                    if (writeCharacteristic) break;
-                }
-            }
-
-            if (!writeCharacteristic) {
-                // Last resort: try to use any characteristic and see if it works
-                console.log('No explicit writable characteristic found, trying all characteristics...');
-                const allServices = await server.getPrimaryServices();
-                for (const service of allServices) {
-                    const characteristics = await service.getCharacteristics();
-                    for (const char of characteristics) {
-                        console.log(`Trying characteristic ${char.uuid} with properties:`, char.properties);
-                        // Try to use this characteristic even if it doesn't explicitly support writing
-                        try {
-                            // Test with a small ESC/POS command
-                            const testCommand = new Uint8Array([0x1B, 0x40]); // ESC @ - Initialize printer
-                            if (char.properties.writeWithoutResponse) {
+                    try {
+                        console.log(`Scanning service: ${service.uuid}`);
+                        const characteristics = await service.getCharacteristics();
+                        console.log(`Service ${service.uuid} has ${characteristics.length} characteristics`);
+                        
+                        for (const char of characteristics) {
+                            console.log(`Characteristic ${char.uuid}:`, {
+                                write: char.properties.write,
+                                writeWithoutResponse: char.properties.writeWithoutResponse,
+                                read: char.properties.read,
+                                notify: char.properties.notify,
+                                indicate: char.properties.indicate
+                            });
+                            
+                            if (char.properties.write || char.properties.writeWithoutResponse) {
                                 writeCharacteristic = char;
-                                console.log(`Using characteristic ${char.uuid} for writing (writeWithoutResponse)`);
-                                break;
-                            } else if (char.properties.write) {
-                                writeCharacteristic = char;
-                                console.log(`Using characteristic ${char.uuid} for writing (write)`);
+                                foundService = service.uuid;
+                                console.log(`✅ Found writable characteristic in service ${service.uuid}`);
                                 break;
                             }
-                        } catch (error) {
-                            console.log(`Characteristic ${char.uuid} failed test:`, error.message);
-                            continue;
                         }
+                        
+                        if (writeCharacteristic) break;
+                    } catch (error) {
+                        console.log(`Error scanning service ${service.uuid}:`, error.message);
+                        continue;
                     }
-                    if (writeCharacteristic) break;
+                }
+            }
+
+            // If still no writable characteristic found, try to use any characteristic that might work
+            if (!writeCharacteristic) {
+                console.log('No explicit writable characteristic found, trying all characteristics...');
+                const allServices = await server.getPrimaryServices();
+                
+                for (const service of allServices) {
+                    try {
+                        const characteristics = await service.getCharacteristics();
+                        for (const char of characteristics) {
+                            console.log(`Testing characteristic ${char.uuid} with properties:`, char.properties);
+                            
+                            // Try to use this characteristic even if it doesn't explicitly support writing
+                            if (char.properties.writeWithoutResponse || char.properties.write) {
+                                writeCharacteristic = char;
+                                foundService = service.uuid;
+                                console.log(`Using characteristic ${char.uuid} for writing`);
+                                break;
+                            }
+                        }
+                        if (writeCharacteristic) break;
+                    } catch (error) {
+                        console.log(`Error testing service ${service.uuid}:`, error.message);
+                        continue;
+                    }
                 }
             }
 
             if (!writeCharacteristic) {
-                throw new Error('No writable characteristic found. The printer may not support the required Bluetooth services. Please check if the printer is in the correct mode for printing.');
+                // Final attempt: Force try the first available characteristic
+                console.log('No characteristics support writing, forcing attempt with first available characteristic...');
+                const allServices = await server.getPrimaryServices();
+                
+                for (const service of allServices) {
+                    try {
+                        const characteristics = await service.getCharacteristics();
+                        if (characteristics.length > 0) {
+                            writeCharacteristic = characteristics[0];
+                            foundService = service.uuid;
+                            console.log(`⚠️  Forcing use of characteristic ${writeCharacteristic.uuid} - this may or may not work`);
+                            console.log(`Characteristic properties:`, writeCharacteristic.properties);
+                            break;
+                        }
+                    } catch (error) {
+                        console.log(`Error accessing service ${service.uuid}:`, error.message);
+                        continue;
+                    }
+                }
+            }
+
+            if (!writeCharacteristic) {
+                // Provide detailed error information
+                const allServices = await server.getPrimaryServices();
+                let serviceInfo = 'Available services:\n';
+                for (const service of allServices) {
+                    try {
+                        const characteristics = await service.getCharacteristics();
+                        serviceInfo += `- ${service.uuid} (${characteristics.length} characteristics)\n`;
+                        for (const char of characteristics) {
+                            serviceInfo += `  - ${char.uuid}: write=${char.properties.write}, writeWithoutResponse=${char.properties.writeWithoutResponse}\n`;
+                        }
+                    } catch (error) {
+                        serviceInfo += `- ${service.uuid} (error: ${error.message})\n`;
+                    }
+                }
+                
+                console.error('No writable characteristic found. Service details:', serviceInfo);
+                throw new Error(`No writable characteristic found. The printer may not support the required Bluetooth services or may not be in the correct mode for printing.\n\nAvailable services:\n${serviceInfo}\n\nPlease ensure:\n1. The printer is turned on and in pairing mode\n2. The printer supports Bluetooth data transfer\n3. The printer is not connected to another device\n4. Try disconnecting and reconnecting the printer`);
             }
 
             // Send data in chunks to avoid buffer overflow
@@ -879,7 +998,7 @@ class ThermalPrinterPOS {
             const dataArray = Array.from(data);
             
             console.log(`Sending ${data.length} bytes to printer in ${Math.ceil(dataArray.length / chunkSize)} chunks`);
-            console.log(`Using characteristic: ${writeCharacteristic.uuid}`);
+            console.log(`Using characteristic: ${writeCharacteristic.uuid} in service: ${foundService}`);
             console.log(`Characteristic properties:`, writeCharacteristic.properties);
             
             for (let i = 0; i < dataArray.length; i += chunkSize) {
@@ -887,35 +1006,74 @@ class ThermalPrinterPOS {
                 const chunkBuffer = new Uint8Array(chunk);
                 
                 try {
+                    let chunkSent = false;
+                    
+                    // Try writeWithoutResponse first (preferred for printers)
                     if (writeCharacteristic.properties.writeWithoutResponse) {
                         await writeCharacteristic.writeValueWithoutResponse(chunkBuffer);
-                        console.log(`Sent chunk ${Math.floor(i / chunkSize) + 1}/${Math.ceil(dataArray.length / chunkSize)} (${chunk.length} bytes) - writeWithoutResponse`);
+                        console.log(`✅ Sent chunk ${Math.floor(i / chunkSize) + 1}/${Math.ceil(dataArray.length / chunkSize)} (${chunk.length} bytes) - writeWithoutResponse`);
+                        chunkSent = true;
                     } else if (writeCharacteristic.properties.write) {
                         await writeCharacteristic.writeValue(chunkBuffer);
-                        console.log(`Sent chunk ${Math.floor(i / chunkSize) + 1}/${Math.ceil(dataArray.length / chunkSize)} (${chunk.length} bytes) - write`);
+                        console.log(`✅ Sent chunk ${Math.floor(i / chunkSize) + 1}/${Math.ceil(dataArray.length / chunkSize)} (${chunk.length} bytes) - write`);
+                        chunkSent = true;
                     } else {
-                        throw new Error('Characteristic does not support writing');
+                        // Force try both methods even if properties don't indicate support
+                        console.log(`⚠️  Characteristic doesn't explicitly support writing, trying anyway...`);
+                        
+                        try {
+                            await writeCharacteristic.writeValueWithoutResponse(chunkBuffer);
+                            console.log(`✅ Sent chunk ${Math.floor(i / chunkSize) + 1}/${Math.ceil(dataArray.length / chunkSize)} (${chunk.length} bytes) - writeWithoutResponse (forced)`);
+                            chunkSent = true;
+                        } catch (writeWithoutResponseError) {
+                            console.log(`writeWithoutResponse failed, trying write:`, writeWithoutResponseError.message);
+                            
+                            try {
+                                await writeCharacteristic.writeValue(chunkBuffer);
+                                console.log(`✅ Sent chunk ${Math.floor(i / chunkSize) + 1}/${Math.ceil(dataArray.length / chunkSize)} (${chunk.length} bytes) - write (forced)`);
+                                chunkSent = true;
+                            } catch (writeError) {
+                                throw new Error(`Both write methods failed: writeWithoutResponse=${writeWithoutResponseError.message}, write=${writeError.message}`);
+                            }
+                        }
                     }
                     
-                    // Small delay between chunks
+                    if (!chunkSent) {
+                        throw new Error('No write method succeeded');
+                    }
+                    
+                    // Small delay between chunks to prevent overwhelming the printer
                     await new Promise(resolve => setTimeout(resolve, 10));
                     
                 } catch (chunkError) {
-                    console.error(`Error sending chunk ${Math.floor(i / chunkSize) + 1}:`, chunkError);
-                    throw new Error(`Failed to send data chunk: ${chunkError.message}`);
+                    console.error(`❌ Error sending chunk ${Math.floor(i / chunkSize) + 1}:`, chunkError);
+                    throw new Error(`Failed to send data chunk ${Math.floor(i / chunkSize) + 1}: ${chunkError.message}`);
                 }
             }
 
-            console.log('All data sent successfully to printer');
+            console.log('✅ All data sent successfully to printer');
             
         } catch (error) {
-            console.error('Bluetooth communication error:', error);
+            console.error('❌ Bluetooth communication error:', error);
             throw new Error(`Failed to send data to printer: ${error.message}`);
         }
     }
 
     closeModal() {
         document.getElementById('receiptModal').style.display = 'none';
+    }
+
+    showTroubleshootModal() {
+        document.getElementById('troubleshootModal').style.display = 'block';
+    }
+
+    closeTroubleshootModal() {
+        document.getElementById('troubleshootModal').style.display = 'none';
+    }
+
+    enableTestModeFromTroubleshoot() {
+        this.closeTroubleshootModal();
+        this.enableTestMode();
     }
 
     showNotification(message, type = 'info') {

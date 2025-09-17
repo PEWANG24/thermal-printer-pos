@@ -591,6 +591,67 @@ header h1 {
     margin-bottom: 5px;
 }
 
+/* Troubleshooting Modal Styles */
+.troubleshoot-content {
+    max-height: 70vh;
+    overflow-y: auto;
+    padding-right: 10px;
+}
+
+.troubleshoot-section {
+    margin-bottom: 25px;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border-left: 4px solid #3498db;
+}
+
+.troubleshoot-section h5 {
+    color: #2c3e50;
+    margin: 0 0 10px 0;
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.troubleshoot-section p {
+    color: #555;
+    margin: 0 0 10px 0;
+    line-height: 1.5;
+}
+
+.troubleshoot-section ul {
+    margin: 10px 0;
+    padding-left: 20px;
+}
+
+.troubleshoot-section li {
+    color: #555;
+    margin-bottom: 8px;
+    line-height: 1.4;
+}
+
+.troubleshoot-section strong {
+    color: #2c3e50;
+    font-weight: 600;
+}
+
+/* Button styles for troubleshooting */
+.btn-info {
+    background: #17a2b8;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: background-color 0.3s ease;
+}
+
+.btn-info:hover {
+    background: #138496;
+}
+
 /* Responsive device selection */
 @media (max-width: 768px) {
     .connection-options {
@@ -605,5 +666,14 @@ header h1 {
     
     .device-item button {
         width: 100%;
+    }
+    
+    .troubleshoot-content {
+        max-height: 60vh;
+    }
+    
+    .troubleshoot-section {
+        padding: 12px;
+        margin-bottom: 20px;
     }
 }
