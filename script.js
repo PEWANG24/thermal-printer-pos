@@ -169,7 +169,18 @@ class ThermalPrinterPOS {
                         const characteristics = await service.getCharacteristics();
                         console.log(`  Characteristics (${characteristics.length}):`);
                         for (const char of characteristics) {
-                            console.log(`    ${char.uuid} - Properties:`, char.properties);
+                            const props = {
+                                broadcast: char.properties.broadcast,
+                                read: char.properties.read,
+                                writeWithoutResponse: char.properties.writeWithoutResponse,
+                                write: char.properties.write,
+                                notify: char.properties.notify,
+                                indicate: char.properties.indicate,
+                                authenticatedSignedWrites: char.properties.authenticatedSignedWrites,
+                                reliableWrite: char.properties.reliableWrite,
+                                writableAuxiliaries: char.properties.writableAuxiliaries
+                            };
+                            console.log(`    ${char.uuid} - Properties:`, props);
                         }
                     } catch (error) {
                         console.log(`  Error getting characteristics: ${error.message}`);
@@ -312,13 +323,20 @@ class ThermalPrinterPOS {
                                 { namePrefix: 'Printer' },
                                 { namePrefix: 'POS' },
                                 { namePrefix: 'BT' },
-                                { namePrefix: 'Bluetooth' }
+                                { namePrefix: 'Bluetooth' },
+                                { namePrefix: 'P502' }
                             ],
                             optionalServices: [
                                 '0000180a-0000-1000-8000-00805f9b34fb', // Generic Access Service
                                 '0000180f-0000-1000-8000-00805f9b34fb', // Battery Service
                                 '0000180d-0000-1000-8000-00805f9b34fb', // Device Information Service
-                                '0000ffe0-0000-1000-8000-00805f9b34fb'  // Common printer service
+                                '0000ffe0-0000-1000-8000-00805f9b34fb', // Common printer service
+                                '0000ff00-0000-1000-8000-00805f9b34fb', // Alternative printer service
+                                '0000ff01-0000-1000-8000-00805f9b34fb', // Printer data service
+                                '0000ff02-0000-1000-8000-00805f9b34fb', // Printer control service
+                                '0000ff03-0000-1000-8000-00805f9b34fb', // Printer status service
+                                '0000ff04-0000-1000-8000-00805f9b34fb', // Printer command service
+                                '0000ff05-0000-1000-8000-00805f9b34fb'  // Printer data service 2
                             ]
                         });
                     } catch (filterError) {
@@ -326,15 +344,21 @@ class ThermalPrinterPOS {
                         
                         // Second try: Accept all devices (user will see all nearby devices)
                         try {
-                            device = await navigator.bluetooth.requestDevice({
-                                acceptAllDevices: true,
-                                optionalServices: [
-                                    '0000180a-0000-1000-8000-00805f9b34fb',
-                                    '0000180f-0000-1000-8000-00805f9b34fb',
-                                    '0000180d-0000-1000-8000-00805f9b34fb',
-                                    '0000ffe0-0000-1000-8000-00805f9b34fb'
-                                ]
-                            });
+                        device = await navigator.bluetooth.requestDevice({
+                            acceptAllDevices: true,
+                            optionalServices: [
+                                '0000180a-0000-1000-8000-00805f9b34fb',
+                                '0000180f-0000-1000-8000-00805f9b34fb',
+                                '0000180d-0000-1000-8000-00805f9b34fb',
+                                '0000ffe0-0000-1000-8000-00805f9b34fb',
+                                '0000ff00-0000-1000-8000-00805f9b34fb',
+                                '0000ff01-0000-1000-8000-00805f9b34fb',
+                                '0000ff02-0000-1000-8000-00805f9b34fb',
+                                '0000ff03-0000-1000-8000-00805f9b34fb',
+                                '0000ff04-0000-1000-8000-00805f9b34fb',
+                                '0000ff05-0000-1000-8000-00805f9b34fb'
+                            ]
+                        });
                         } catch (acceptAllError) {
                             throw new Error('No devices found or user cancelled selection');
                         }
@@ -769,7 +793,12 @@ class ThermalPrinterPOS {
                 '0000180f-0000-1000-8000-00805f9b34fb', // Battery Service
                 '0000180d-0000-1000-8000-00805f9b34fb', // Device Information Service
                 '0000ffe0-0000-1000-8000-00805f9b34fb', // Common printer service
-                '0000ff00-0000-1000-8000-00805f9b34fb'  // Alternative printer service
+                '0000ff00-0000-1000-8000-00805f9b34fb', // Alternative printer service
+                '0000ff01-0000-1000-8000-00805f9b34fb', // Printer data service
+                '0000ff02-0000-1000-8000-00805f9b34fb', // Printer control service
+                '0000ff03-0000-1000-8000-00805f9b34fb', // Printer status service
+                '0000ff04-0000-1000-8000-00805f9b34fb', // Printer command service
+                '0000ff05-0000-1000-8000-00805f9b34fb'  // Printer data service 2
             ];
 
             let writeCharacteristic = null;
@@ -812,7 +841,37 @@ class ThermalPrinterPOS {
             }
 
             if (!writeCharacteristic) {
-                throw new Error('No writable characteristic found. The printer may not support the required Bluetooth services.');
+                // Last resort: try to use any characteristic and see if it works
+                console.log('No explicit writable characteristic found, trying all characteristics...');
+                const allServices = await server.getPrimaryServices();
+                for (const service of allServices) {
+                    const characteristics = await service.getCharacteristics();
+                    for (const char of characteristics) {
+                        console.log(`Trying characteristic ${char.uuid} with properties:`, char.properties);
+                        // Try to use this characteristic even if it doesn't explicitly support writing
+                        try {
+                            // Test with a small ESC/POS command
+                            const testCommand = new Uint8Array([0x1B, 0x40]); // ESC @ - Initialize printer
+                            if (char.properties.writeWithoutResponse) {
+                                writeCharacteristic = char;
+                                console.log(`Using characteristic ${char.uuid} for writing (writeWithoutResponse)`);
+                                break;
+                            } else if (char.properties.write) {
+                                writeCharacteristic = char;
+                                console.log(`Using characteristic ${char.uuid} for writing (write)`);
+                                break;
+                            }
+                        } catch (error) {
+                            console.log(`Characteristic ${char.uuid} failed test:`, error.message);
+                            continue;
+                        }
+                    }
+                    if (writeCharacteristic) break;
+                }
+            }
+
+            if (!writeCharacteristic) {
+                throw new Error('No writable characteristic found. The printer may not support the required Bluetooth services. Please check if the printer is in the correct mode for printing.');
             }
 
             // Send data in chunks to avoid buffer overflow
