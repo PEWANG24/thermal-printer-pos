@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thermal Printer POS</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🖨️ Thermal Printer POS</h1>
+            <div class="printer-status">
+                <span id="printerStatus" class="status-disconnected">Printer: Not Connected</span>
+                <button id="connectBtn" class="btn btn-primary">Connect Printer</button>
+            </div>
+        </header>
+
+        <main>
+            <div class="pos-layout">
+                <!-- Product Catalog -->
+                <div class="catalog-section">
+                    <h2>Products</h2>
+                    <div class="product-grid" id="productGrid">
+                        <!-- Products will be dynamically loaded -->
+                    </div>
+                </div>
+
+                <!-- Shopping Cart -->
+                <div class="cart-section">
+                    <h2>Order</h2>
+                    <div class="cart-items" id="cartItems">
+                        <p class="empty-cart">No items in cart</p>
+                    </div>
+                    <div class="cart-total">
+                        <div class="total-line">
+                            <span>Subtotal:</span>
+                            <span id="subtotal">$0.00</span>
+                        </div>
+                        <div class="total-line">
+                            <span>Tax (8%):</span>
+                            <span id="tax">$0.00</span>
+                        </div>
+                        <div class="total-line total">
+                            <span>Total:</span>
+                            <span id="total">$0.00</span>
+                        </div>
+                    </div>
+                    <div class="cart-actions">
+                        <button id="clearCartBtn" class="btn btn-secondary">Clear Cart</button>
+                        <button id="checkoutBtn" class="btn btn-success">Checkout & Print</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Receipt Preview Modal -->
+            <div id="receiptModal" class="modal">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3>Receipt Preview</h3>
+                        <span class="close">&times;</span>
+                    </div>
+                    <div class="modal-body">
+                        <div class="receipt-preview" id="receiptPreview">
+                            <!-- Receipt content will be generated here -->
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button id="printReceiptBtn" class="btn btn-primary">Print Receipt</button>
+                        <button id="cancelPrintBtn" class="btn btn-secondary">Cancel</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="escpos-commands.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>

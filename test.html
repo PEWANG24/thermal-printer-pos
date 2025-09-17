@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>POS Test</title>
+</head>
+<body>
+    <h1>Thermal Printer POS - Test Page</h1>
+    <div id="test-results"></div>
+    
+    <script src="escpos-commands.js"></script>
+    <script>
+        // Test ESC/POS commands
+        try {
+            const escpos = new ESCPOSCommands();
+            const testData = {
+                storeName: 'TEST STORE',
+                items: [{ name: 'Test Item', quantity: 1, price: 5.99, total: 5.99 }],
+                subtotal: 5.99,
+                tax: 0.48,
+                total: 6.47,
+                date: new Date(),
+                receiptNumber: 12345
+            };
+            
+            const commands = escpos.generateReceipt(testData);
+            document.getElementById('test-results').innerHTML = `
+                <h2>✅ Tests Passed!</h2>
+                <p>ESC/POS Commands: ${commands.length} bytes generated</p>
+                <p>POS System: Ready</p>
+                <p><a href="index.html">Go to POS System</a></p>
+            `;
+        } catch (error) {
+            document.getElementById('test-results').innerHTML = `
+                <h2>❌ Test Failed</h2>
+                <p>Error: ${error.message}</p>
+            `;
+        }
+    </script>
+</body>
+</html>

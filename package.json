@@ -1,0 +1,19 @@
+{
+  "name": "thermal-printer-pos",
+  "version": "1.0.0",
+  "description": "Simple POS system for testing thermal printer functionality",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "start": "vite"
+  },
+  "keywords": ["pos", "thermal-printer", "bluetooth", "receipt", "esc-pos"],
+  "author": "Peter Ngigi",
+  "license": "MIT",
+  "devDependencies": {
+    "vite": "^5.0.0"
+  },
+  "dependencies": {}
+}
